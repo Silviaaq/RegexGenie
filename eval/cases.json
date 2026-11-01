@@ -1,0 +1,660 @@
+[
+  {
+    "id": "E01",
+    "instruction": "Find email addresses in Email and replace them with 'REDACTED'.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ],
+      [
+        "Mail: one+tag@domain.org; x@y.net"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "expected": [
+      [
+        "REDACTED"
+      ],
+      [
+        "Mail: REDACTED; REDACTED"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E02",
+    "instruction": "Please hide every email address in the Email column using REDACTED.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ],
+      [
+        "Mail: one+tag@domain.org; x@y.net"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "expected": [
+      [
+        "REDACTED"
+      ],
+      [
+        "Mail: REDACTED; REDACTED"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E03",
+    "instruction": "Email: substitute REDACTED for each email address.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ],
+      [
+        "Mail: one+tag@domain.org; x@y.net"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "expected": [
+      [
+        "REDACTED"
+      ],
+      [
+        "Mail: REDACTED; REDACTED"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E04",
+    "instruction": "In Email, mask mail addresses as REDACTED but keep surrounding text.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ],
+      [
+        "Mail: one+tag@domain.org; x@y.net"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "expected": [
+      [
+        "REDACTED"
+      ],
+      [
+        "Mail: REDACTED; REDACTED"
+      ],
+      [
+        "plain"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E05",
+    "instruction": "Remove email addresses from Email.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "Hi a@b.com!"
+      ],
+      [
+        "none"
+      ]
+    ],
+    "expected": [
+      [
+        "Hi !"
+      ],
+      [
+        "none"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E06",
+    "instruction": "Replace each digit in ID with X.",
+    "headers": [
+      "ID"
+    ],
+    "rows": [
+      [
+        "001"
+      ],
+      [
+        "A12"
+      ],
+      [
+        "ABC"
+      ]
+    ],
+    "expected": [
+      [
+        "XXX"
+      ],
+      [
+        "AXX"
+      ],
+      [
+        "ABC"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E07",
+    "instruction": "In Notes, replace runs of digits with NUM.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "Order 123 and 45"
+      ],
+      [
+        "none"
+      ]
+    ],
+    "expected": [
+      [
+        "Order NUM and NUM"
+      ],
+      [
+        "none"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E08",
+    "instruction": "In Notes, remove digits.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "A12B3"
+      ]
+    ],
+    "expected": [
+      [
+        "AB"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E09",
+    "instruction": "In Notes, remove spaces at the beginning of each value.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "  hello "
+      ],
+      [
+        "x"
+      ]
+    ],
+    "expected": [
+      [
+        "hello "
+      ],
+      [
+        "x"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E10",
+    "instruction": "In Notes, remove spaces at the end of each value.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        " hello  "
+      ],
+      [
+        "x"
+      ]
+    ],
+    "expected": [
+      [
+        " hello"
+      ],
+      [
+        "x"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E11",
+    "instruction": "In Notes, replace runs of spaces with one space.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "a   b  c"
+      ]
+    ],
+    "expected": [
+      [
+        "a b c"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E12",
+    "instruction": "In Notes, replace the literal word cat with dog, case sensitively.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "cat scatter Cat cat"
+      ]
+    ],
+    "expected": [
+      [
+        "dog scatter Cat dog"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E13",
+    "instruction": "In Notes, replace the word cat with dog ignoring case.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "Cat CAT cat scatter"
+      ]
+    ],
+    "expected": [
+      [
+        "dog dog dog scatter"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E14",
+    "instruction": "In Code, replace the prefix ABC- with XYZ-.",
+    "headers": [
+      "Code"
+    ],
+    "rows": [
+      [
+        "ABC-123"
+      ],
+      [
+        "xABC-123"
+      ]
+    ],
+    "expected": [
+      [
+        "XYZ-123"
+      ],
+      [
+        "xABC-123"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E15",
+    "instruction": "In Code, remove the suffix -old.",
+    "headers": [
+      "Code"
+    ],
+    "rows": [
+      [
+        "record-old"
+      ],
+      [
+        "old-record"
+      ]
+    ],
+    "expected": [
+      [
+        "record"
+      ],
+      [
+        "old-record"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E16",
+    "instruction": "In Notes, replace literal periods with underscores.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "a.b.c"
+      ]
+    ],
+    "expected": [
+      [
+        "a_b_c"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E17",
+    "instruction": "In Notes, replace literal plus signs with PLUS.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "a+b+c"
+      ]
+    ],
+    "expected": [
+      [
+        "aPLUSbPLUSc"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E18",
+    "instruction": "In Notes, replace either apple or pear with fruit.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "apple pear orange"
+      ]
+    ],
+    "expected": [
+      [
+        "fruit fruit orange"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E19",
+    "instruction": "In Notes, replace email addresses with X.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "😀 a@b.com"
+      ]
+    ],
+    "expected": [
+      [
+        "😀 X"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E20",
+    "instruction": "In Email, replace email addresses with X.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "no address"
+      ],
+      [
+        ""
+      ],
+      [
+        "NA"
+      ]
+    ],
+    "expected": [
+      [
+        "no address"
+      ],
+      [
+        ""
+      ],
+      [
+        "NA"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E21",
+    "instruction": "In Email, replace email addresses with X.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ]
+    ],
+    "expected": [
+      [
+        "$1"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": "$1"
+  },
+  {
+    "id": "E22",
+    "instruction": "In Email, replace email addresses with X.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ]
+    ],
+    "expected": [
+      [
+        ""
+      ]
+    ],
+    "unsupported": false,
+    "replacement": ""
+  },
+  {
+    "id": "E23",
+    "instruction": "In Contact, replace email addresses with HIDDEN.",
+    "headers": [
+      "Contact"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ]
+    ],
+    "expected": [
+      [
+        "HIDDEN"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E24",
+    "instruction": "In email, replace email addresses with X.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ]
+    ],
+    "expected": [
+      [
+        "X"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E25",
+    "instruction": "In Notes, replace literal [done] with OK.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "[done] task"
+      ]
+    ],
+    "expected": [
+      [
+        "OK task"
+      ]
+    ],
+    "unsupported": false,
+    "replacement": null
+  },
+  {
+    "id": "E26",
+    "instruction": "Set every value in Notes to Done.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "task"
+      ]
+    ],
+    "expected": null,
+    "unsupported": true,
+    "replacement": null
+  },
+  {
+    "id": "E27",
+    "instruction": "Replace digits in the Missing column with X.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "123"
+      ]
+    ],
+    "expected": null,
+    "unsupported": true,
+    "replacement": null
+  },
+  {
+    "id": "E28",
+    "instruction": "Find email addresses and replace them with X.",
+    "headers": [
+      "Email"
+    ],
+    "rows": [
+      [
+        "a@b.com"
+      ]
+    ],
+    "expected": null,
+    "unsupported": true,
+    "replacement": null
+  },
+  {
+    "id": "E29",
+    "instruction": "In Notes remove digits and then uppercase all words.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "a1"
+      ]
+    ],
+    "expected": null,
+    "unsupported": true,
+    "replacement": null
+  },
+  {
+    "id": "E30",
+    "instruction": "Convert dates in Notes to ISO dates.",
+    "headers": [
+      "Notes"
+    ],
+    "rows": [
+      [
+        "1 Feb 2026"
+      ]
+    ],
+    "expected": null,
+    "unsupported": true,
+    "replacement": null
+  }
+]

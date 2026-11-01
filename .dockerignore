@@ -1,0 +1,10 @@
+.git
+.openai
+node_modules
+dist
+.venv
+**/__pycache__
+**/*.sqlite3*
+**/.env
+**/.env.*
+!**/.env.example
