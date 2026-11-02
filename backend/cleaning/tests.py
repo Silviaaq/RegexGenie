@@ -328,3 +328,28 @@ class CleaningTests(TestCase):
         j.refresh_from_db()
         self.assertEqual(j.status, "failed")
         self.assertEqual(self.current()["rows"][0][0], "a@example.com")
+
+
+class GroqTransportTests(TestCase):
+    def test_every_task_explicitly_requests_json_and_bounded_output(self):
+        from unittest.mock import Mock
+
+        with patch.dict(
+            "os.environ", {"GROQ_API_KEY": "test-key", "GROQ_MODEL": "test-model"}
+        ):
+            with patch(
+                "cleaning.services.llm.requests.post",
+                return_value=Mock(
+                    status_code=200,
+                    json=lambda: {
+                        "choices": [{"message": {"content": '{"items":[]}'}}]
+                    },
+                ),
+            ) as request:
+                llm.call(
+                    "Return suggestions.", {"values": [{"id": "v0", "value": "AU"}]}
+                )
+                payload = request.call_args.kwargs["json"]
+                self.assertIn("JSON", payload["messages"][0]["content"])
+                self.assertEqual(payload["response_format"], {"type": "json_object"})
+                self.assertLess(payload["max_completion_tokens"], 2048)
