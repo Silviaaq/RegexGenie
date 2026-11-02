@@ -353,3 +353,15 @@ class GroqTransportTests(TestCase):
                 self.assertIn("JSON", payload["messages"][0]["content"])
                 self.assertEqual(payload["response_format"], {"type": "json_object"})
                 self.assertLess(payload["max_completion_tokens"], 2048)
+
+
+class ExportRowTests(TestCase):
+    def test_xlsx_preserves_fully_blank_trailing_rows(self):
+        raw, _ = files.export(
+            {"headers": ["Age"], "rows": [[None], ["0"], ["NA"], [None]]}, "xlsx"
+        )
+        sheet = openpyxl.load_workbook(io.BytesIO(raw)).active
+        self.assertEqual(sheet.max_row, 5)
+        self.assertIsNone(sheet["A2"].value)
+        self.assertIsNone(sheet["A5"].value)
+        self.assertEqual(sheet["A3"].value, "0")
