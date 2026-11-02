@@ -20,11 +20,18 @@ def call(system, payload):
             json={
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": system},
+                    {
+                        "role": "system",
+                        "content": "Return only a valid JSON object. " + system,
+                    },
                     {"role": "user", "content": json.dumps(payload)},
                 ],
                 "temperature": 0,
-                "max_completion_tokens": 12000,
+                "max_completion_tokens": (
+                    min(8192, 768 + len(payload["values"]) * 96)
+                    if "values" in payload
+                    else 2048
+                ),
                 "response_format": {"type": "json_object"},
             },
             timeout=(5, 45),
@@ -38,7 +45,7 @@ def call(system, payload):
         if r.status_code != 200:
             raise AppError(
                 "AI is temporarily unavailable. Your data is unchanged.",
-                "LLM_UNAVAILABLE",
+                f"LLM_HTTP_{r.status_code}",
                 503,
             )
         content = r.json()["choices"][0]["message"]["content"]
