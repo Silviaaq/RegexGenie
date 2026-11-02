@@ -41,6 +41,12 @@ npm run test:ui
 npm run build
 ```
 
+For explicit real-Groq public acceptance using synthetic data (consumes the configured provider quota):
+
+```sh
+.venv/bin/python scripts/verify_live_v19.py
+```
+
 The original V1.5 models, migration, APIs and tests are retained. `cleaning` adds four models and the V1.9 routes. `frontend/legacy-v15.jsx` is retained solely for the existing regression tests, and is not shipped in the V1.9 browser bundle. See [validation](docs/VALIDATION_V1.9.md) for results and limits; fixture tests do not substitute for real-model acceptance.
 
 ## Three demos
@@ -62,7 +68,7 @@ Click **Try Sample Data** to load synthetic customers into the real workspace.
 
 ## Deployment
 
-`Dockerfile` builds React and serves it from Django/WhiteNoise. `render.yaml` declares a single free web service named RegexGenie, with generated Django secret and server-side Groq configuration. Source preparation is complete; deployment has **not** been performed in this delivery.
+`Dockerfile` builds React and serves it from Django/WhiteNoise. `render.yaml` declares a single free web service named RegexGenie, with generated Django secret and server-side Groq configuration. V1.9 is deployed at **https://regexgenie.onrender.com**. The Render service uses the repository main branch; check docs/VALIDATION_V1.9.md for the acceptance record.
 
 ```sh
 docker build -t regexgenie .
@@ -71,7 +77,7 @@ docker run --rm -p 10000:10000 --env-file backend/.env regexgenie
 
 For production set `DJANGO_DEBUG=0`, appropriate `DJANGO_ALLOWED_HOSTS`, HTTPS `DJANGO_CSRF_ORIGINS`, `GROQ_API_KEY`, `GROQ_MODEL`, `DATABASE_PATH=/tmp/regexgenie.sqlite3`, and `WORKSPACE_DIR=/tmp/regexgenie-workspaces`. Render hostname is included automatically. Secure session/CSRF cookies require HTTPS. Do not use development settings publicly.
 
-Connect the GitHub branch to the existing RegexGenie Render service, configure the variables, deploy and verify `/api/health/`. Before public release verify current Render free-tier terms, cold start, worker restart, session isolation, and all three real-Groq upload-to-download flows from a fresh browser. **No V1.9 public URL is claimed until these checks pass.** The current authenticated GitHub account has READ access to the source repository; the Render browser is not signed in.
+Connect the GitHub branch to the existing RegexGenie Render service, configure the variables, deploy and verify `/api/health/`. Before public release verify current Render free-tier terms, cold start, worker restart, session isolation, and all three real-Groq upload-to-download flows from a fresh browser. The authenticated browser connection supports this repository and Render service; no credentials are committed. Free instances may take 50 seconds or longer to wake.
 
 ## Architecture
 
