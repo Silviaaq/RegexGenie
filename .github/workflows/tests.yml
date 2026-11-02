@@ -17,7 +17,7 @@ jobs:
       - run: npm test
       - run: npm run test:ui
       - run: npm run build
-      - run: python backend/manage.py test core --noinput
+      - run: python backend/manage.py test cleaning core --noinput
         env:
           DJANGO_SECRET_KEY: ci-test-only-not-a-production-secret
       - run: docker build -t regexgenie:test .

@@ -14,6 +14,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "core.apps.CoreConfig",
+    "cleaning",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -35,8 +36,8 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = not DEBUG
 CSRF_TRUSTED_ORIGINS = [x for x in os.getenv("DJANGO_CSRF_ORIGINS", "").split(",") if x]
-DATA_UPLOAD_MAX_MEMORY_SIZE = 3 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 11 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

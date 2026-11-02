@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: regexgenie
+    name: RegexGenie
     runtime: docker
     plan: free
-    healthCheckPath: /api/health
+    healthCheckPath: /api/health/
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true
@@ -15,3 +15,5 @@ services:
         sync: false
       - key: GROQ_MODEL
         sync: false
+      - key: WORKSPACE_DIR
+        value: /tmp/regexgenie-workspaces

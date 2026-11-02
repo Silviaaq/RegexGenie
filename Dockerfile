@@ -7,7 +7,7 @@ COPY frontend ./frontend
 RUN npm run build
 
 FROM python:3.12-slim-bookworm
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DJANGO_DEBUG=0 DATABASE_PATH=/tmp/regexgenie.sqlite3
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DJANGO_DEBUG=0 DATABASE_PATH=/tmp/regexgenie.sqlite3 WORKSPACE_DIR=/tmp/regexgenie-workspaces
 WORKDIR /app
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt && useradd --create-home app

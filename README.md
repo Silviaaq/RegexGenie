@@ -1,147 +1,80 @@
-# RegexGenie
+# RegexGenie V1.9
 
-A focused React + Django app for **Regex Pattern Matching and Replacement**.
-Upload CSV or Excel, describe a pattern in one named column, review the original
-and replacement side by side, then download the complete result.
+Natural-language spreadsheet cleaning with React, Django and Groq. Upload → describe → review → apply → download. The English UI follows the warm-white, navy, green Original and purple Preview design specification.
 
-Every instruction—including examples—uses Groq. Examples only fill the text box.
-There is no fixed instruction whitelist or offline fallback pretending to be AI.
-All application-owned UI text is English; uploaded content is preserved.
+## Features
 
-## Status
-
-Core implementation and automated tests are included. Real Groq evaluation and
-public Render acceptance are **pending environment configuration and deployment**.
-Creating accounts does not itself connect them to the application. No public URL
-is claimed in this repository until a full live test has passed.
+- UTF-8 CSV and standard XLSX up to 10 MB; single-sheet selection, 50-row pagination, immutable original parsed data.
+- Real Groq planning for regex replacements. Explicit replacement value or Remove matched text. Literal replacement semantics; match highlighting and navigation; strict validation and timed execution.
+- Separate Preview, Apply and Download; revision checks, high-impact confirmation, single Undo, Reset and continued cleaning.
+- Semantic value normalisation and missing-marker recognition in one text column. Exact-value scope selection, search, budgets, explicit per-task consent, Keep by default, individual review and safe bulk selection.
+- Session ownership, CSRF, temporary private snapshots, worker polling, bounded files/regex/LLM requests and structured errors. Original uploads are never overwritten.
+- Single-table CSV/XLSX export. Unchanged XLSX numbers, dates, booleans and strings retain their basic types. Missing values are internal null and export as blanks.
 
 ## Local setup
 
-Requirements: Python 3.12 and Node 22.
+Requires Python 3.11+ and Node 22+. From the project directory:
 
 ```sh
 python3 -m venv .venv
-. .venv/bin/activate
-pip install -r backend/requirements.txt
+.venv/bin/pip install -r backend/requirements.txt
 npm ci
 cp backend/.env.example backend/.env
 ```
 
-Edit `backend/.env` locally: set `GROQ_API_KEY`, an available `GROQ_MODEL`, and a
-random `DJANGO_SECRET_KEY`. Generate the latter locally with:
+Edit `backend/.env`: set a random `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=1`, and a valid backend-only `GROQ_API_KEY` and `GROQ_MODEL`. Select a currently available Groq text model supporting JSON object responses. No fixed pattern or fake AI fallback is used. Without model configuration, uploads, previews of existing data and exports work; AI tasks report configuration errors.
 
 ```sh
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+sh scripts/dev.sh
 ```
 
-Do not send keys in chat or commit `.env`. Shell-load the file after editing:
+Open **http://127.0.0.1:8019**. The script builds React, migrates SQLite and starts Django plus a single worker. `PORT` overrides the local port. Restart after source changes. To develop React with Vite, run Django on port 8000 and `npm run dev` separately; include the Vite origin in `DJANGO_CSRF_ORIGINS`.
+
+For manual startup, export the variables from backend/.env, then run `python manage.py worker` and `python manage.py runserver` in separate backend shells. A worker is required; web requests only enqueue jobs.
+
+## Verification
 
 ```sh
-set -a
-. backend/.env
-set +a
-python backend/manage.py migrate
-npm run build
-python backend/manage.py runserver 127.0.0.1:8000
-```
-
-Open http://127.0.0.1:8000. Django serves the built React app and same-origin API.
-For frontend development, keep Django running and use `npm run dev` in a second
-terminal; Vite proxies `/api` to port 8000. Local development can run without Groq
-credentials to test upload; generation then returns a clear configuration error.
-
-## Render: one free web service
-
-1. Push the source to https://github.com/Silviaaq/RegexGenie.
-2. In Render create a **Web Service** from this repository, runtime **Docker**,
-   root directory repository root, instance **Free**. Do not create a static site,
-   persistent disk, or database. Alternatively use `render.yaml` as a Blueprint
-   and check that the proposed service remains Free before applying it.
-3. Set `GROQ_API_KEY`, `GROQ_MODEL`, `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=0`, and
-   `DATABASE_PATH=/tmp/regexgenie.sqlite3`. The Blueprint generates a Django secret.
-   Keys belong only in Render's secret environment configuration.
-4. Render provides `PORT` and `RENDER_EXTERNAL_HOSTNAME`; settings derive allowed
-   hosts and the HTTPS CSRF origin from that hostname. For a custom domain,
-   explicitly set `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_ORIGINS` too.
-5. The Docker image builds React, installs Django, migrates disposable SQLite,
-   starts a cleanup loop, and runs Gunicorn. Health check: `/api/health`.
-6. Open the Render URL and test your own CSV plus a previously unseen instruction;
-   verify both downloaded formats contain all rows. Follow `docs/VALIDATION.md`.
-
-The Docker build is included in GitHub Actions. It could not be run in the
-current authoring environment because Docker is unavailable. Do not mark public
-acceptance complete until the actual Render build and live workflow pass.
-
-Free hosting may sleep and lose temporary local data when sleeping, restarting,
-or redeploying. No permanent storage or 24-hour retention is promised. Provider
-quotas can suspend the service; no paid fallback is configured. Verify the plan
-shown in your account before deploying.
-
-## Tests and live model evaluation
-
-```sh
+DJANGO_SECRET_KEY=test-only .venv/bin/python backend/manage.py test cleaning core
 npm test
 npm run test:ui
 npm run build
-DJANGO_SECRET_KEY=test-only python backend/manage.py test core --noinput
 ```
 
-API tests mock the model boundary and execute real parsing/replacement/export.
-UI tests use jsdom and mock HTTP responses; they are not full browser acceptance.
-For an explicit live check using your locally configured Groq credentials:
+The original V1.5 models, migration, APIs and tests are retained. `cleaning` adds four models and the V1.9 routes. `frontend/legacy-v15.jsx` is retained solely for the existing regression tests, and is not shipped in the V1.9 browser bundle. See [validation](docs/VALIDATION_V1.9.md) for results and limits; fixture tests do not substitute for real-model acceptance.
+
+## Three demos
+
+Click **Try Sample Data** to load synthetic customers into the real workspace.
+
+1. `Find email addresses in the Email column` → replacement `REDACTED` → Generate preview → inspect matched text → Apply changes → download. Also try phone digits, order IDs or punctuation on your own synthetic CSV.
+2. `Standardise Country values to full English country names` → select AU/AUS/australia/WA → explicitly approve sharing → review suggestions. Keep ambiguous WA or approve it individually; bulk selection excludes Needs Review.
+3. `Identify missing-value markers in the Age column` → select and approve sharing → review N/A, Not provided, 0 and NA. Apply only approved markers as missing. 0/000/NA/- are guarded as uncertain or valid.
+
+## Data and privacy limits
+
+- Maximum 10,000 data rows, 50 columns and 250,000 cells; XLSX decompression bounded at 50 MB, 2,000 ZIP members and 20 sheets. Simple rectangular tables and one header row only. Unsupported encodings, legacy XLS, merged reports and password-protected workbooks need conversion.
+- Regex planning sends only instruction and column IDs/names. P1 sends only selected exact values and temporary IDs after consent, never row frequencies or neighbouring cells. The instruction and column names may themselves be sensitive. Approved mapping history remains local.
+- Per P1 task: at most 200 distinct nonempty values, 4,000 characters each and 40,000 total. Select a subset when over budget; unselected values remain unchanged. No automatic filling of facts.
+- Files are temporary. Download promptly. Expiry cleanup targets 30 minutes; restarts may interrupt tasks or lose data earlier. No account, durable queue, redo or unlimited history.
+- Export contains only the selected table. Other sheets, formulas, styling and display formats are not preserved. Formulas use last cached values on import; absent caches become blank. CSV cannot preserve null versus empty-string identity. Formula-like CSV text is prefixed with an apostrophe for safety; XLSX strings are explicitly typed as text.
+- A single web process and single managed worker are required for this SQLite deployment. Worker restart marks interrupted queued/running jobs failed. Logs exclude prompts, values, AI responses and keys.
+
+## Deployment
+
+`Dockerfile` builds React and serves it from Django/WhiteNoise. `render.yaml` declares a single free web service named RegexGenie, with generated Django secret and server-side Groq configuration. Source preparation is complete; deployment has **not** been performed in this delivery.
 
 ```sh
-python scripts/evaluate_model.py --limit 1
-python scripts/evaluate_model.py --limit 30 --delay 15
+docker build -t regexgenie .
+docker run --rm -p 10000:10000 --env-file backend/.env regexgenie
 ```
 
-This sends synthetic instructions/column metadata to Groq and consumes its quota.
-It checks processed values rather than exact regex strings and records model ID,
-time, pass/fail and latency in `eval/latest.json`. The 30-case suite is provided;
-no real-model score is claimed until that command is run.
+For production set `DJANGO_DEBUG=0`, appropriate `DJANGO_ALLOWED_HOSTS`, HTTPS `DJANGO_CSRF_ORIGINS`, `GROQ_API_KEY`, `GROQ_MODEL`, `DATABASE_PATH=/tmp/regexgenie.sqlite3`, and `WORKSPACE_DIR=/tmp/regexgenie-workspaces`. Render hostname is included automatically. Secure session/CSRF cookies require HTTPS. Do not use development settings publicly.
 
-## Product and data boundaries
+Connect the GitHub branch to the existing RegexGenie Render service, configure the variables, deploy and verify `/api/health/`. Before public release verify current Render free-tier terms, cold start, worker restart, session isolation, and all three real-Groq upload-to-download flows from a fresh browser. **No V1.9 public URL is claimed until these checks pass.** The current authenticated GitHub account has READ access to the source repository; the Render browser is not signed in.
 
-- CSV (UTF-8 with optional BOM) or `.xlsx`; at most 2 MB, 5,000 data rows, 50 columns.
-- One file, one selected sheet, one regex replacement in one named column per run.
-- Leading zeros in text, literal NA/NULL, empty cells and surrounding text remain.
-  Excel numeric values with display-only leading zeros cannot recover those zeros.
-- XLSX imports cached formula values, never executes formulas; missing caches become
-  empty with a warning. No merged cells, macros, or password-protected workbooks.
-  Maximum 20 sheets / 500,000 allocated cells per workbook / 25 MB expanded archive;
-  remove unused formatted ranges if a sheet exceeds its dimension limit.
-- Downloads include the entire selected sheet. Excel exports plain text values,
-  not original formulas, formatting, types or other sheets. CSV escapes formula-like
-  prefixes; prefer Excel when exact literal values are required.
-- Optional replacement overrides instruction replacement. Explicit empty text
-  removes matches. Replacement backslashes and `$1` are literal, not group references.
-- New previews always start from original values. A download uses a frozen result ID.
-- Pages contain 50 rows. Navigation fetches the match location and required page,
-  with Unicode-aware highlights and synchronized table scrolling.
-- Row/column assignment, multiple operations, all-column matching and semantic
-  transformations are outside this release.
+## Architecture
 
-## Temporary data and security
+`backend/core/` preserves V1.5. `backend/cleaning/models.py` defines Workspace, UploadedFile, CleaningJob and CleaningSuggestion. `services/files.py` parses and snapshots typed data; `services/llm.py` calls Groq and validates complete schemas; `services/jobs.py` stages plans and diffs; `views.py` enforces ownership and versioned application; `management/commands/worker.py` processes jobs and cleans temporary state. `frontend/main.jsx` implements Landing and Workspace; `style.css` contains shared responsive tokens and styling.
 
-Django owns parsing/execution. Only instruction, replacement, named column IDs and
-names, and row count go to Groq; cell contents do not. Instructions and names can
-still contain sensitive data, so users should avoid including it.
-
-Anonymous server sessions isolate resources. Mutations require CSRF protection.
-HTTPS production cookies are Secure/HttpOnly/SameSite=Lax. API responses are no-store;
-React renders cell values as text. Regex and parsing run in killable subprocesses.
-Each session can make five generation requests/minute, keep five files and ten
-previews/file; use a **single Gunicorn worker**, since limits use process-local cache.
-The limiter is not a substitute for edge abuse protection on a large public service.
-
-Files have a 30-minute internal expiry, cleaned on API access and every minute by
-the container cleanup loop. This is a maximum processing window, not guaranteed
-availability. Use Delete File & Results for early deletion. Export does not extend
-expiry. SQLite uses secure deletion; no application backups are configured. Platform
-replicas/logging policies are not a guarantee of forensic erasure.
-
-> Files are temporary. Download your results promptly. You may need to upload again
-> if the service sleeps or restarts.
-
-See [Product and architecture](docs/PRODUCT_TECHNICAL.md),
-[API](docs/API.md), [UI](docs/UI_SPEC.md), and [Validation](docs/VALIDATION.md).
+The Groq adapter follows [Groq API compatibility](https://console.groq.com/docs/openai) and [JSON output documentation](https://console.groq.com/docs/structured-outputs), with server-side schema validation regardless of model response mode.
