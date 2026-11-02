@@ -16,3 +16,7 @@ artifacts/
 .DS_Store
 
 .vscode/
+
+backend/private_workspaces/
+.env
+.venv/
