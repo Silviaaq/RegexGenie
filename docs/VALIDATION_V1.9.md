@@ -2,10 +2,14 @@
 
 ## Verified locally
 
-- 43 Django tests: 22 V1.9 tests plus 21 retained V1.5 tests.
+- 45 Django tests: 24 V1.9 tests plus 21 retained V1.5 tests.
 - 8 React interaction tests: 4 V1.9 tests plus 4 retained V1.5 regression tests.
 - 2 JavaScript data/Unicode regression tests.
 - Production Vite build, Django system check and migrations.
+- GitHub Actions: all tests and Linux Docker image build passed.
+- Public Render V1.9 deployment: https://regexgenie.onrender.com.
+- Four real Groq regex tasks (email, phone, order ID, digits), CSV/XLSX export and actual browser preview/apply/download passed.
+- Real semantic and missing-marker suggestions passed schema/approval checks after JSON-mode fixes. A trailing blank XLSX row issue was detected and fixed with a regression test; the full public export rerun is recorded separately.
 - Native browser: Landing, actual synthetic CSV upload, actual table preview and model-unconfigured error state.
 - npm audit after updating the test runner: zero reported vulnerabilities.
 
@@ -13,9 +17,9 @@ Tests use mocked Groq transport/proposals where indicated. They verify determini
 
 ## Not yet verified
 
-- Real Groq A01/A03/A07/A08 and model quality: no Groq key configured in this environment.
-- Docker image execution: Docker CLI exists but no daemon is running.
-- Render deployment/cold start/restart and public end-to-end A13: Render is not signed in; no deployment performed.
+- Broader model-quality evaluation beyond the synthetic live acceptance cases.
+- Local Docker daemon execution: unavailable; the Docker build passed in GitHub Actions and the image runs on Render.
+- A deliberate restart during a running job and long-idle wakeup timing have not been independently stress-tested. Actual deployments successfully restarted the managed worker and database migrations.
 - Safari and independent screen-reader audit.
 
 ## Audit and compatibility

@@ -167,7 +167,9 @@ def export(data, fmt):
                 v = {"datetime": datetime, "date": date, "time": time}[
                     v["$type"]
                 ].fromisoformat(v["value"])
-            values.append(v)
+            # Write an explicit blank string cell for null so a fully blank
+            # trailing data row is retained in the XLSX worksheet structure.
+            values.append("" if v is None else v)
         ws.append(values)
         for c in ws[ws.max_row]:
             if isinstance(c.value, str):
