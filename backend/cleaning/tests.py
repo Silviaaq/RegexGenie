@@ -346,7 +346,7 @@ class CleaningTests(TestCase):
         self.assertEqual(response.status_code, 202)
         plan = {"operation": "regex_replace", "target_column_id": "c0",
                 "pattern": r"[\w.]+@[\w.]+", "flags": [],
-                "action": action, "replacement_value": replacement}
+                "action": action}
         with patch.object(llm, "call", return_value=plan):
             jobs.work_one()
         return CleaningJob.objects.get(pk=response.json()["job_id"])
@@ -362,14 +362,15 @@ class CleaningTests(TestCase):
         self.assertEqual(self.current()["rows"][0][0], literal)
 
     def test_inferred_missing_or_conflicting_replacement_requires_clarification(self):
-        j = self.inferred(action=None, replacement=None)
+        j = self.inferred(action=None, replacement=None, instruction="Find email addresses in the Email column.")
         self.assertEqual(j.status, "needs_input")
         self.assertTrue(j.impact_json["replacement_required"])
         self.assertFalse(j.result_path)
         response = self.post(f"jobs/{j.id}/", {
             "base_revision": j.base_revision, "action": "replace", "replacement_value": "REDACTED"})
         self.assertEqual(response.status_code, 200)
-        jobs.work_one()
+        with patch.object(llm, "call", return_value={"operation":"regex_replace", "target_column_id":"c0", "pattern":r"[\w.]+@[\w.]+", "flags":[]}):
+            jobs.work_one()
         j.refresh_from_db()
         self.assertEqual(j.status, "ready")
         self.assertEqual(j.replacement_value, "REDACTED")
@@ -381,12 +382,26 @@ class CleaningTests(TestCase):
         self.apply(j, confirm_high_risk=True)
         self.assertEqual(self.current()["rows"][0][0], "")
 
-    def test_inferred_replacement_cannot_be_invented_or_empty(self):
-        for replacement in ("INVENTED", "", 1):
-            j = self.inferred(replacement=replacement)
-            self.assertEqual(j.status, "failed")
-            self.assertEqual(j.error_code, "INVALID_AI_RESPONSE")
+    def test_model_supplied_literal_is_not_accepted(self):
+        with patch.object(llm, "call", return_value={
+            "operation":"regex_replace", "target_column_id":"c0", "pattern":"x", "flags":[],
+            "action":"replace", "replacement_value":"INVENTED"}):
+            with self.assertRaises(AppError):
+                llm.route("Replace x in Email with 'REDACTED'", ["Email"], infer=True)
         self.assertEqual(self.current()["rows"][0][0], "a@example.com")
+
+    def test_find_only_preflight_does_not_call_provider_or_advance_data(self):
+        response = self.post(f"workspaces/{self.id}/jobs/", {
+            "instruction":"Find email addresses in the Email column.", "base_revision":self.w["revision"]})
+        with patch.object(llm, "call") as provider:
+            jobs.work_one()
+            provider.assert_not_called()
+        j = CleaningJob.objects.get(pk=response.json()["job_id"])
+        self.assertEqual(j.status, "needs_input")
+        self.assertIsNone(j.plan_json)
+        self.assertEqual(j.target_column_id, "c0")
+        self.assertEqual(self.current()["rows"][0][0], "a@example.com")
+        self.assertEqual(Workspace.objects.get(pk=self.id).revision, j.base_revision)
 
     def test_compact_scope_exposes_all_values_only_when_entire_scope_fits(self):
         response = self.client.get(f"/api/workspaces/{self.id}/values/?column_id=c1").json()
@@ -452,3 +467,79 @@ class ExportRowTests(TestCase):
         self.assertIsNone(sheet["A2"].value)
         self.assertIsNone(sheet["A5"].value)
         self.assertEqual(sheet["A3"].value, "0")
+
+
+class LiteralPlanningTests(TestCase):
+    def test_literal_spaces_backslashes_and_quotes_are_not_reencoded(self):
+        for value in (r" C:\Temp\1 $1 ", " ", "O'Reilly", "remove", "REDACTED"):
+            instruction = 'Find identifiers in Code and replace them with "' + value + '".'
+            actual, planning = llm.literal_replacement(instruction)
+            self.assertEqual(actual, value)
+            self.assertNotIn(value, planning) if value != " " else None
+            with patch.object(llm, "call", return_value={"operation":"regex_replace", "target_column_id":"c0", "pattern":"ID", "flags":[], "action":None}) as provider:
+                plan = llm.route(instruction, ["Code"], infer=True)
+            self.assertEqual(plan["replacement_value"], value)
+            self.assertEqual(plan["action"], "replace")
+            self.assertIn("[literal replacement handled by server]", provider.call_args.args[1]["instruction"])
+
+    def test_conflicts_unclosed_quotes_and_empty_values_request_clarification(self):
+        for instruction in (
+            "Replace email with 'X' or 'Y'.", "Replace email with 'X' and replace phone with 'Y'.",
+            "Replace email with 'X", "Replace email with ''.", "Replace email with X or Y."):
+            self.assertIsNone(llm.literal_replacement(instruction)[0])
+            with patch.object(llm, "call", return_value={"operation":"regex_replace", "target_column_id":"c0", "pattern":"x", "flags":[], "action":"replace"}):
+                plan = llm.route(instruction, ["Email"], infer=True)
+            self.assertIsNone(plan["action"])
+            self.assertIsNone(plan["replacement_value"])
+
+    def test_preflight_does_not_intercept_p1_ambiguous_or_mixed_tasks(self):
+        for instruction, headers in [
+            ("Find missing values in the Email column.", ["Email"]),
+            ("Find emails in the Email column and normalise names.", ["Email"]),
+            ("Find email addresses in the Email column.", ["Email", "Email"]),
+            ("Find email addresses.", ["Email", "Notes"])]:
+            self.assertIsNone(llm.find_only_column(instruction, headers))
+
+
+class ProviderRecoveryTests(TestCase):
+    def response(self, status, code=None, content='{"ok":true}'):
+        from unittest.mock import Mock
+        return Mock(status_code=status, headers={"x-request-id":"req_test-123"}, json=lambda: (
+            {"choices":[{"message":{"content":content}}]} if status==200 else
+            {"error":{"code":code,"message":"DO_NOT_LOG_PRIVATE_MESSAGE", "failed_generation":"DO_NOT_LOG_GENERATION"}}))
+
+    def invoke(self, responses):
+        with patch.dict("os.environ", {"GROQ_API_KEY":"DO_NOT_LOG_KEY", "GROQ_MODEL":"test-model"}):
+            with patch.object(llm.requests, "post", side_effect=responses) as request:
+                try:
+                    return llm.call("Return JSON", {"instruction":"DO_NOT_LOG_INSTRUCTION"}), request
+                except AppError as error:
+                    return error, request
+
+    def test_json_generation_400_is_repaired_once_without_logging_content(self):
+        with self.assertLogs("cleaning.services.llm", level="WARNING") as logs:
+            result, request = self.invoke([self.response(400,"json_validate_failed"), self.response(200)])
+        self.assertEqual(result,{"ok":True})
+        self.assertEqual(request.call_count,2)
+        self.assertIn("Escape every regex backslash",request.call_args.kwargs["json"]["messages"][0]["content"])
+        output=" ".join(logs.output)
+        self.assertIn("json_validate_failed",output)
+        self.assertNotIn("DO_NOT_LOG",output)
+
+    def test_repair_is_bounded_and_other_400_is_not_retried(self):
+        for code, count, expected in [("json_validate_failed",2,"LLM_JSON_GENERATION_FAILED"),("invalid_request_error",1,"LLM_REQUEST_REJECTED")]:
+            result, request=self.invoke([self.response(400,code)]*2)
+            self.assertEqual(result.code,expected)
+            self.assertEqual(request.call_count,count)
+
+    def test_auth_model_rate_and_network_errors_are_distinct_and_not_retried(self):
+        import requests
+        for response, expected in [(self.response(401),"LLM_AUTH_ERROR"),(self.response(404),"LLM_MODEL_UNAVAILABLE"),(self.response(429),"LLM_RATE_LIMITED"),(requests.Timeout(),"LLM_UNAVAILABLE")]:
+            result,request=self.invoke([response])
+            self.assertEqual(result.code,expected)
+            self.assertEqual(request.call_count,1)
+
+    def test_invalid_json_is_repaired_once(self):
+        result,request=self.invoke([self.response(200,content="invalid"),self.response(200)])
+        self.assertEqual(result,{"ok":True})
+        self.assertEqual(request.call_count,2)
