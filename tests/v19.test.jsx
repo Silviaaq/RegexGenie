@@ -13,6 +13,7 @@ let calls = [];
 let operation = "regex_replace";
 let consented = false;
 let longTable = false;
+let clarifyReplacement = false;
 const w = {
   workspace_id: "w1",
   revision: 2,
@@ -33,6 +34,7 @@ beforeEach(() => {
   operation = "regex_replace";
   consented = false;
   longTable = false;
+  clarifyReplacement = false;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url, opts = {}) => {
@@ -98,6 +100,20 @@ beforeEach(() => {
               reason: "Ambiguous",
             },
           ],
+        };
+      else if (url === "/api/jobs/j1/" && opts.method === "POST") {
+        clarifyReplacement = false;
+        d = { job_id: "j1", status: "queued" };
+      } else if (url === "/api/jobs/j1/" && clarifyReplacement)
+        d = {
+          job_id: "j1",
+          status: "needs_input",
+          operation: "regex_replace",
+          target_column_id: "c0",
+          impact: {
+            message: "What should replace the matched text?",
+            replacement_required: true,
+          },
         };
       else if (url === "/api/jobs/j1/")
         d =
@@ -303,5 +319,31 @@ test("P1 selection and global totals survive pagination without modifying the or
   );
   expect(within(preview).getByText("AU")).toBeTruthy();
   expect(within(preview).getAllByText("Australia").length).toBe(1);
+  expect(calls.some(([url]) => url.includes("/apply/"))).toBe(false);
+});
+
+test("find-only clarification asks for replacement and preserves the user's exact input", async () => {
+  clarifyReplacement = true;
+  await sample();
+  expect(screen.queryByLabelText("Exact replacement value")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Describe what to change"), {
+    target: { value: "Find email addresses in the Email column." },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Generate preview" }));
+  const field = await screen.findByLabelText("Exact replacement value");
+  expect(screen.queryByLabelText("Target column")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Continue", exact: true }).disabled,
+  ).toBe(true);
+  const value = String.raw` C:\Temp\1 $1 `;
+  fireEvent.change(field, { target: { value } });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Continue", exact: true }),
+  );
+  await screen.findByRole("button", { name: "Apply changes" });
+  const request = calls.find(
+    ([url, options]) => url === "/api/jobs/j1/" && options.method === "POST",
+  );
+  expect(JSON.parse(request[1].body).replacement_value).toBe(value);
   expect(calls.some(([url]) => url.includes("/apply/"))).toBe(false);
 });
