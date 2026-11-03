@@ -129,6 +129,14 @@ def process(job):
     data = files.read(job.workspace.current_path)
     if job.base_revision != job.workspace.revision:
         raise AppError("Your data changed. Refresh the preview.", "STALE_REVISION", 409)
+    if not job.plan_json and job.action is None:
+        cid = llm.find_only_column(job.instruction, data["headers"])
+        if cid is not None:
+            job.operation = "regex_replace"
+            job.target_column_id = cid
+            job.status = "needs_input"
+            job.impact_json = {"message": "What should replace the matched text?", "replacement_required": True}
+            return
     if not job.plan_json:
         job.plan_json = llm.route(job.instruction, data["headers"], infer=job.action is None)
         job.operation = job.plan_json["operation"]
