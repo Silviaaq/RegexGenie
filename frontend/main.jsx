@@ -132,6 +132,7 @@ function Table({
   scrollRef,
   highlights = [],
   after = false,
+  target,
 }) {
   return (
     <div className={"table-wrap " + kind} onScroll={onScroll} ref={scrollRef}>
@@ -140,7 +141,12 @@ function Table({
           <tr>
             <th scope="col">#</th>
             {headers.map((h, i) => (
-              <th scope="col" key={i}>
+              <th
+                scope="col"
+                key={i}
+                data-column={`c${i}`}
+                className={target === `c${i}` ? "target-column" : ""}
+              >
                 {h || `Column ${i + 1}`}
               </th>
             ))}
@@ -530,6 +536,22 @@ export function App() {
     if (risk) dialog.current?.showModal();
     else dialog.current?.close();
   }, [risk]);
+  E(() => {
+    if (job?.status !== "ready") return;
+    for (const pane of [left.current, right.current]) {
+      const header = pane?.querySelector(
+        `[data-column="${job.target_column_id}"]`,
+      );
+      if (header)
+        pane.scrollLeft = Math.max(
+          0,
+          pane.scrollLeft +
+            header.getBoundingClientRect().left -
+            pane.getBoundingClientRect().left -
+            48,
+        );
+    }
+  }, [job?.job_id, job?.status, table?.offset]);
   const positions = job?.impact?.match_positions || [],
     active = positions[match]?.row ?? -1;
   async function navigateMatch(delta) {
@@ -1370,6 +1392,7 @@ export function App() {
                           offset={table.offset}
                           active={active}
                           highlights={positions}
+                          target={job?.target_column_id}
                           scrollRef={left}
                           onScroll={() => scroll(left, right)}
                         />
@@ -1388,6 +1411,7 @@ export function App() {
                           active={active}
                           highlights={positions}
                           after
+                          target={job?.target_column_id}
                           scrollRef={right}
                           onScroll={() => scroll(right, left)}
                         />

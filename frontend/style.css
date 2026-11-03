@@ -1221,3 +1221,14 @@ textarea:disabled {
     width: 100%;
   }
 }
+
+.original .target-column {
+  background: #edf8f1;
+  color: #16724b;
+  font-weight: 700;
+}
+.preview .target-column {
+  background: #f3eefc;
+  color: var(--purple);
+  font-weight: 700;
+}

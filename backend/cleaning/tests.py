@@ -267,6 +267,14 @@ class CleaningTests(TestCase):
                 with self.assertRaises(AppError):
                     llm.proposals(j, [{"id": "v0", "value": "AU"}])
 
+    def test_semantic_proposal_cannot_silently_clear_a_value(self):
+        j = self.make(operation="normalise_values", cid="c1")
+        with patch.object(llm, "call", return_value={"items": [
+            {"id": "v0", "status": "needs_review", "proposed_value": "", "reason": "Ambiguous"}
+        ]}):
+            with self.assertRaises(AppError):
+                llm.proposals(j, [{"id": "v0", "value": "WA"}])
+
     def test_xlsx_native_types(self):
         wb = openpyxl.Workbook()
         s = wb.active
