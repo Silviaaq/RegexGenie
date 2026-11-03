@@ -2,6 +2,12 @@
 
 Natural-language spreadsheet cleaning with React, Django and Groq. Upload → describe → review → apply → download. The English UI follows the warm-white, navy, green Original and purple Preview design specification.
 
+## Showcase
+
+This video demonstrates text replacement, value standardisation, and missing-value recognition using a 10,000-row spreadsheet sample.
+
+https://github.com/user-attachments/assets/60bbcf54-ed21-44b9-a840-c3f624f1ddae
+
 ## Features
 
 - UTF-8 CSV and standard XLSX up to 10 MB; single-sheet selection, 50-row pagination, immutable original parsed data.
