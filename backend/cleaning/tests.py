@@ -329,6 +329,85 @@ class CleaningTests(TestCase):
         self.assertEqual(j.status, "failed")
         self.assertEqual(self.current()["rows"][0][0], "a@example.com")
 
+    def inferred(self, action="replace", replacement="REDACTED", instruction=None):
+        cache.clear()
+        response = self.post(f"workspaces/{self.id}/jobs/", {
+            "instruction": instruction or "Find emails in Email and replace them with 'REDACTED'",
+            "base_revision": self.w["revision"],
+        })
+        self.assertEqual(response.status_code, 202)
+        plan = {"operation": "regex_replace", "target_column_id": "c0",
+                "pattern": r"[\w.]+@[\w.]+", "flags": [],
+                "action": action, "replacement_value": replacement}
+        with patch.object(llm, "call", return_value=plan):
+            jobs.work_one()
+        return CleaningJob.objects.get(pk=response.json()["job_id"])
+
+    def test_single_instruction_extracts_and_persists_literal_without_applying(self):
+        literal = r" \1 $1 "
+        j = self.inferred(replacement=literal, instruction=f"Replace emails in Email with '{literal}'")
+        self.assertEqual(j.status, "ready")
+        self.assertEqual(j.replacement_value, literal)
+        self.assertEqual(j.action, "replace")
+        self.assertEqual(self.current()["rows"][0][0], "a@example.com")
+        self.assertEqual(self.apply(j).status_code, 200)
+        self.assertEqual(self.current()["rows"][0][0], literal)
+
+    def test_inferred_missing_or_conflicting_replacement_requires_clarification(self):
+        j = self.inferred(action=None, replacement=None)
+        self.assertEqual(j.status, "needs_input")
+        self.assertTrue(j.impact_json["replacement_required"])
+        self.assertFalse(j.result_path)
+        response = self.post(f"jobs/{j.id}/", {
+            "base_revision": j.base_revision, "action": "replace", "replacement_value": "REDACTED"})
+        self.assertEqual(response.status_code, 200)
+        jobs.work_one()
+        j.refresh_from_db()
+        self.assertEqual(j.status, "ready")
+        self.assertEqual(j.replacement_value, "REDACTED")
+
+    def test_inferred_explicit_deletion_still_requires_risk_confirmation(self):
+        j = self.inferred(action="remove", replacement=None, instruction="Remove email addresses from Email")
+        self.assertEqual(j.status, "ready")
+        self.assertEqual(self.apply(j).status_code, 409)
+        self.apply(j, confirm_high_risk=True)
+        self.assertEqual(self.current()["rows"][0][0], "")
+
+    def test_inferred_replacement_cannot_be_invented_or_empty(self):
+        for replacement in ("INVENTED", "", 1):
+            j = self.inferred(replacement=replacement)
+            self.assertEqual(j.status, "failed")
+            self.assertEqual(j.error_code, "INVALID_AI_RESPONSE")
+        self.assertEqual(self.current()["rows"][0][0], "a@example.com")
+
+    def test_compact_scope_exposes_all_values_only_when_entire_scope_fits(self):
+        response = self.client.get(f"/api/workspaces/{self.id}/values/?column_id=c1").json()
+        self.assertTrue(response["within_budget"])
+        self.assertEqual(len(response["all_items"]), 3)
+        w = Workspace.objects.get(pk=self.id)
+        d = self.current()
+        d["rows"] = [["a@example.com", str(i), "0"] for i in range(201)]
+        w.current_path = files.snapshot(d)
+        w.save()
+        response = self.client.get(f"/api/workspaces/{self.id}/values/?column_id=c1").json()
+        self.assertFalse(response["within_budget"])
+        self.assertEqual(response["all_items"], [])
+        self.assertEqual(len(response["items"]), 50)
+
+    def test_keep_all_is_noop_preserving_revision_and_undo(self):
+        j = self.make(operation="normalise_values", cid="c1")
+        self.consent(j)
+        with patch.object(llm, "proposals", return_value=[
+            {"id": v["id"], "status": "proposed", "proposed_value": "Australia", "reason": "Country"}
+            for v in j.scope_json["values"]]):
+            jobs.work_one()
+        j.refresh_from_db()
+        self.assertEqual(self.apply(j, selected_suggestion_ids=[]).json()["status"], "no_changes")
+        w = Workspace.objects.get(pk=self.id)
+        self.assertEqual(w.revision, j.base_revision)
+        self.assertIsNone(w.previous_path)
+
+
 
 class GroqTransportTests(TestCase):
     def test_every_task_explicitly_requests_json_and_bounded_output(self):

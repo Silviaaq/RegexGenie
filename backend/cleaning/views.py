@@ -172,9 +172,9 @@ def submit(r, id):
         raise AppError(
             "Enter one instruction of up to 2,000 characters.", "INVALID_REQUEST", 400
         )
-    action = b.get("action", "replace")
+    action = b.get("action", "replace" if "replacement_value" in b else None)
     replacement = b.get("replacement_value")
-    if action not in ("replace", "remove") or (
+    if action not in (None, "replace", "remove") or (
         replacement is not None
         and (not isinstance(replacement, str) or len(replacement) > 2000)
     ):
@@ -247,6 +247,10 @@ def status(r, id):
                     "Use a replacement of up to 2,000 characters.", "INVALID_REQUEST"
                 )
             j.target_column_id = cid
+            action = b.get("action", j.action)
+            if action not in (None, "replace", "remove"):
+                raise AppError("Choose a valid replacement action.", "INVALID_REQUEST")
+            j.action = action
             j.replacement_value = replacement
             j.status = "queued"
             j.save()
@@ -276,8 +280,13 @@ def distinct(r, id):
     q = r.GET.get("q", "").lower()
     page = max(1, int(r.GET.get("page", 1)))
     filtered = [v for v in vs if q in v["value"].lower()]
+    within_budget = (len(vs) <= 200 and sum(len(v["value"]) for v in vs) <= 40000
+                     and all(len(v["value"]) <= 4000 for v in vs))
     return JsonResponse(
         {
+            "within_budget": within_budget,
+            "all_items": vs if within_budget else [],
+            "total_characters": sum(len(v["value"]) for v in vs),
             "items": filtered[(page - 1) * 50 : page * 50],
             "total": len(vs),
             "filtered_total": len(filtered),
