@@ -130,21 +130,25 @@ def process(job):
     if job.base_revision != job.workspace.revision:
         raise AppError("Your data changed. Refresh the preview.", "STALE_REVISION", 409)
     if not job.plan_json:
-        job.plan_json = llm.route(job.instruction, data["headers"])
+        job.plan_json = llm.route(job.instruction, data["headers"], infer=job.action is None)
         job.operation = job.plan_json["operation"]
         job.target_column_id = job.plan_json["target_column_id"]
+    if job.operation == "regex_replace" and job.action is None:
+        job.action = job.plan_json.get("action")
+        job.replacement_value = job.plan_json.get("replacement_value")
     if not job.target_column_id:
         job.status = "needs_input"
         job.impact_json = {"message": "Which column should I clean?"}
         return
     job.plan_json["target_column_id"] = job.target_column_id
     if job.operation == "regex_replace":
-        if job.action == "replace" and (
+        if job.action not in ("replace", "remove") or (job.action == "replace" and (
             not isinstance(job.replacement_value, str) or job.replacement_value == ""
-        ):
+        )):
             job.status = "needs_input"
             job.impact_json = {
-                "message": "Enter a replacement value or choose Remove matched text."
+                "message": "What should replace the matched text? Enter one exact value, explicitly choose removal, or edit your instruction.",
+                "replacement_required": True
             }
             return
         replacement = "" if job.action == "remove" else job.replacement_value
@@ -255,6 +259,8 @@ def work_one():
             "plan_hash",
             "result_path",
             "error_code",
+            "action",
+            "replacement_value",
         )
     }
     CleaningJob.objects.filter(

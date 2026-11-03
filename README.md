@@ -1,15 +1,25 @@
-# RegexGenie V1.9
+# RegexGenie V1.10
 
 Natural-language spreadsheet cleaning with React, Django and Groq. Upload → describe → review → apply → download. The English UI follows the warm-white, navy, green Original and purple Preview design specification.
 
 ## Features
 
 - UTF-8 CSV and standard XLSX up to 10 MB; single-sheet selection, 50-row pagination, immutable original parsed data.
-- Real Groq planning for regex replacements. Explicit replacement value or Remove matched text. Literal replacement semantics; match highlighting and navigation; strict validation and timed execution.
+- Real Groq planning for regex replacements. A single instruction includes the exact replacement or explicitly requests removal. Missing or conflicting replacements ask for clarification. Literal replacement semantics; match highlighting and navigation; strict validation and timed execution.
 - Separate Preview, Apply and Download; revision checks, high-impact confirmation, single Undo, Reset and continued cleaning.
 - Semantic value normalisation and missing-marker recognition in one text column. Exact-value scope selection, search, budgets, explicit per-task consent, Keep by default, individual review and safe bulk selection.
 - Session ownership, CSRF, temporary private snapshots, worker polling, bounded files/regex/LLM requests and structured errors. Original uploads are never overwritten.
 - Single-table CSV/XLSX export. Unchanged XLSX numbers, dates, booleans and strings retain their basic types. Missing values are internal null and export as blanks.
+
+## V1.10 interaction update
+
+- Describe what to change in one instruction; the separate replacement panel appears only when clarification is needed. The resolved literal replacement is visible before Apply. The V1.9 explicit action/replacement API remains compatible.
+- Small semantic-cleaning scopes are summarised with an expandable exact-value list and an unchecked consent box. Over-budget columns retain searchable scope selection. Changing scope clears consent.
+- Semantic and missing-value suggestions start at Keep. Check Apply per suggestion or select all eligible suggestions; ambiguous items require individual selection. Batch buttons retain a visible, accessible pressed state; Keep all restores the unchanged preview.
+- Original and Preview show the exact selected changes before Apply, including repeated values and pagination. Download always exports the last applied data.
+- Updated landing copy explains upload, describe, and review/download. Questionnaire topic analysis is outside this release.
+
+Public testing: open **https://regexgenie.onrender.com/app** or use **Try Sample Data** on the homepage. No account or local installation is required. Temporary files may disappear on restart; download results promptly.
 
 ## Local setup
 
@@ -53,7 +63,7 @@ The original V1.5 models, migration, APIs and tests are retained. `cleaning` add
 
 Click **Try Sample Data** to load synthetic customers into the real workspace.
 
-1. `Find email addresses in the Email column` → replacement `REDACTED` → Generate preview → inspect matched text → Apply changes → download. Also try phone digits, order IDs or punctuation on your own synthetic CSV.
+1. `Find email addresses in the Email column and replace them with 'REDACTED'.` → Generate preview → inspect matched text → Apply changes → download. Also try phone digits, order IDs or punctuation on your own synthetic CSV.
 2. `Standardise Country values to full English country names` → select AU/AUS/australia/WA → explicitly approve sharing → review suggestions. Keep ambiguous WA or approve it individually; bulk selection excludes Needs Review.
 3. `Identify missing-value markers in the Age column` → select and approve sharing → review N/A, Not provided, 0 and NA. Apply only approved markers as missing. 0/000/NA/- are guarded as uncertain or valid.
 
@@ -68,7 +78,7 @@ Click **Try Sample Data** to load synthetic customers into the real workspace.
 
 ## Deployment
 
-`Dockerfile` builds React and serves it from Django/WhiteNoise. `render.yaml` declares a single free web service named RegexGenie, with generated Django secret and server-side Groq configuration. V1.9 is deployed at **https://regexgenie.onrender.com**. The Render service uses the repository main branch; check docs/VALIDATION_V1.9.md for the acceptance record.
+`Dockerfile` builds React and serves it from Django/WhiteNoise. `render.yaml` declares a single free web service named RegexGenie, with generated Django secret and server-side Groq configuration. The public app is deployed at **https://regexgenie.onrender.com**. The Render service uses the repository main branch; check docs/VALIDATION_V1.9.md for the acceptance record.
 
 ```sh
 docker build -t regexgenie .

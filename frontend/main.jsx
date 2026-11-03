@@ -15,6 +15,8 @@ import {
   X,
   ShieldCheck,
   Search,
+  ListChecks,
+  Shield,
 } from "lucide-react";
 import "./style.css";
 
@@ -253,8 +255,10 @@ function Landing({ upload, sample, start }) {
           </div>
           <div className="demo-content">
             <div className="demo-instruction">
-              <span>Find email addresses in the Email column</span>
-              <span className="demo-chip">Replacement: REDACTED</span>
+              <span>
+                Find email addresses in the Email column and replace them with
+                'REDACTED'.
+              </span>
               <span className="purple-label">Generate preview</span>
             </div>
             <div className="dual">
@@ -286,20 +290,16 @@ function Landing({ upload, sample, start }) {
           <h2>From messy to ready, in three steps.</h2>
           <div className="steps">
             {[
-              [
-                "01",
-                "Bring your spreadsheet",
-                "Upload a CSV or Excel file. Your original stays untouched.",
-              ],
+              ["01", "File upload", "Upload a CSV or Excel file."],
               [
                 "02",
-                "Tell Genie what to clean",
-                "Find patterns, standardise values or review missing markers.",
+                "Describe your changes",
+                "Tell Genie what you want to change.",
               ],
               [
                 "03",
-                "Review. Apply. Download.",
-                "See every change and decide what to keep.",
+                "Review and download",
+                "Compare the original and cleaned data side by side before downloading.",
               ],
             ].map(([n, h, p]) => (
               <article key={n}>
@@ -328,6 +328,7 @@ export function App() {
     [sheetChoices, setSheetChoices] = S([]),
     [suggestions, setSuggestions] = S([]),
     [selected, setSelected] = S([]),
+    [batch, setBatch] = S(null),
     [scope, setScope] = S([]),
     [scopeInfo, setScopeInfo] = S(null),
     [scopePage, setScopePage] = S(1),
@@ -347,6 +348,7 @@ export function App() {
     left = R(),
     right = R(),
     syncing = R(false),
+    scopeInitialized = R(null),
     dialog = R();
   E(() => {
     api("config")
@@ -387,10 +389,16 @@ export function App() {
     }
   }
   function clearJob() {
+    epoch.current++;
     setLastAppliedId(null);
     setJob(null);
     setSuggestions([]);
     setSelected([]);
+    setBatch(null);
+    setColumn("");
+    setReplacement("");
+    setRemove(false);
+    scopeInitialized.current = null;
     setScope([]);
     setScopeInfo(null);
     setConsent(false);
@@ -448,8 +456,9 @@ export function App() {
   async function sample() {
     const content =
       "ID,Name,Email,Country,Age\n1,John Doe,john.doe@example.com,AU,N/A\n2,Jane Smith,jane_smith@domain.com,AUS,0\n3,Alice Brown,alice.brown@website.org,australia,Not provided\n4,Sam Lee,sam@example.com,WA,NA\n5,Chris Green,chris@example.org,UK,32\n";
-    setInstruction("Find email addresses in the Email column");
-    setReplacement("REDACTED");
+    setInstruction(
+      "Find email addresses in the Email column and replace them with 'REDACTED'.",
+    );
     await uploadFile(
       new File([content], "customers.csv", { type: "text/csv" }),
     );
@@ -457,19 +466,8 @@ export function App() {
   async function generate() {
     clearJob();
     await run("Understanding your instruction…", async () => {
-      if (
-        replacement &&
-        replacement.trim() === "" &&
-        !remove &&
-        !confirm(
-          "The replacement contains only whitespace. Keep this exact value?",
-        )
-      )
-        return;
       const j = await api(`workspaces/${w.workspace_id}/jobs/`, {
         instruction,
-        action: remove ? "remove" : "replace",
-        replacement_value: replacement,
         base_revision: w.revision,
       });
       setJob(j);
@@ -483,12 +481,17 @@ export function App() {
       try {
         const j = await api(`jobs/${job.job_id}/`);
         if (!alive || n !== epoch.current) return;
-        setJob(j);
         if (j.status === "ready") {
           if (j.operation === "regex_replace") await refresh(w, 1, j.job_id);
-          else
-            setSuggestions((await api(`jobs/${j.job_id}/suggestions/`)).items);
+          else {
+            const d = await api(`jobs/${j.job_id}/suggestions/`);
+            if (!alive || n !== epoch.current) return;
+            setSuggestions(d.items);
+            await refresh(w, 1, j.job_id);
+          }
         }
+        if (!alive || n !== epoch.current) return;
+        setJob(j);
         if (j.status === "failed") setError(j.impact.message);
         if (j.status === "awaiting_consent") {
           setScopePage(1);
@@ -510,13 +513,19 @@ export function App() {
       `workspaces/${w.workspace_id}/values/?column_id=${job.target_column_id}&page=${scopePage}&q=${encodeURIComponent(query)}`,
     )
       .then((d) => {
-        if (alive) setScopeInfo(d);
+        if (alive) {
+          setScopeInfo(d);
+          if (scopeInitialized.current !== job.job_id) {
+            scopeInitialized.current = job.job_id;
+            if (d.within_budget) setScope(d.all_items);
+          }
+        }
       })
       .catch((e) => setError(e.message));
     return () => {
       alive = false;
     };
-  }, [job?.status, scopePage, query]);
+  }, [job?.status, job?.job_id, scopePage, query]);
   E(() => {
     if (risk) dialog.current?.showModal();
     else dialog.current?.close();
@@ -604,19 +613,48 @@ export function App() {
       await refresh(res, 1, null);
     });
   }
-  const semanticHint =
-    /standardis|standardiz|normalis|normaliz|missing[ -]value|missing markers/i.test(
-      instruction,
-    );
-  const reviewing = job && ["ready", "awaiting_consent"].includes(job.status);
+  const reviewing =
+    job && ["ready", "awaiting_consent", "needs_input"].includes(job.status);
   const running = busy || ["queued", "running"].includes(job?.status),
     p1 = job && job.operation && job.operation !== "regex_replace",
-    canGenerate =
-      w?.file &&
-      instruction.trim() &&
-      !running &&
-      !reviewing &&
-      (semanticHint || remove || replacement !== "");
+    p1Ready = p1 && job.status === "ready",
+    eligible = suggestions.filter(
+      (s) =>
+        s.ai_status ===
+        (job?.operation === "normalise_missing" ? "missing" : "proposed"),
+    ),
+    allEligible =
+      eligible.length > 0 &&
+      eligible.every((s) => selected.includes(s.id)) &&
+      selected.length === eligible.length,
+    changedSuggestions = suggestions.filter(
+      (s) =>
+        selected.includes(s.id) &&
+        (job?.operation === "normalise_missing" || s.original !== s.proposed),
+    ),
+    changedRows = changedSuggestions.reduce((n, s) => n + s.occurrences, 0),
+    previewRows =
+      p1Ready && table
+        ? table.before.map((row) =>
+            row.map((v, c) => {
+              if (`c${c}` !== job.target_column_id || typeof v !== "string")
+                return v;
+              const suggestion = changedSuggestions.find(
+                (s) => s.original === v,
+              );
+              return suggestion
+                ? job.operation === "normalise_missing"
+                  ? null
+                  : suggestion.proposed
+                : v;
+            }),
+          )
+        : table?.rows,
+    canGenerate = w?.file && instruction.trim() && !running && !reviewing;
+  function selectSuggestions(ids, mode = null) {
+    setSelected(ids);
+    setBatch(mode);
+  }
   return (
     <>
       <input
@@ -792,31 +830,31 @@ export function App() {
                   <span className="step-label">01 / DESCRIBE</span>
                 </div>
               </div>
-              <label htmlFor="instruction">Describe what to find</label>
+              <label htmlFor="instruction">Describe what to change</label>
               <textarea
                 id="instruction"
-                disabled={!!reviewing}
+                disabled={!!reviewing || !!running}
                 value={instruction}
                 maxLength={2000}
                 onChange={(e) => {
                   setInstruction(e.target.value);
                 }}
-                placeholder="e.g. Find email addresses in the Email column"
+                placeholder="e.g. Find email addresses in the Email column and replace them with 'REDACTED'."
                 rows={3}
               />
               <div className="examples">
                 <span>Try an instruction:</span>
                 {[
-                  "Find email addresses in the Email column",
+                  "Find email addresses in the Email column and replace them with 'REDACTED'.",
                   "Standardise Country values to full English country names",
                   "Identify missing-value markers in the Age column",
                 ].map((v, i) => (
                   <button
                     className="example"
+                    disabled={!!reviewing || !!running}
                     key={v}
                     onClick={() => {
                       setInstruction(v);
-                      if (i === 0) setReplacement("REDACTED");
                     }}
                   >
                     {
@@ -830,36 +868,10 @@ export function App() {
                   </button>
                 ))}
               </div>
-              <div className="replacement">
-                <label htmlFor="replacement">
-                  Replacement value
-                  <input
-                    id="replacement"
-                    value={replacement}
-                    disabled={remove || p1 || reviewing}
-                    onChange={(e) => setReplacement(e.target.value)}
-                    placeholder="e.g. REDACTED"
-                    maxLength={2000}
-                  />
-                </label>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={remove}
-                    disabled={p1 || reviewing}
-                    onChange={(e) => setRemove(e.target.checked)}
-                  />
-                  Remove matched text
-                </label>
-              </div>
               <p className="caption left-align">
-                {p1
-                  ? "Replacement value is only used for regex replacements."
-                  : remove
-                    ? "Matched text will be removed."
-                    : !replacement
-                      ? "Enter a replacement value for regex, or choose Remove matched text. AI value cleaning uses suggestions instead."
-                      : "Your exact replacement text is used, including spaces."}
+                Include what to find, the target column and the replacement text
+                in one instruction. For deletion, explicitly ask to remove the
+                matched text.
               </p>
               <div className="form-bottom">
                 <p>
@@ -879,32 +891,78 @@ export function App() {
             {job?.status === "needs_input" && (
               <section className="card">
                 <h2>{job.impact.message}</h2>
-                <label>
-                  Target column
-                  <select
-                    value={column}
-                    onChange={(e) => setColumn(e.target.value)}
-                  >
-                    <option value="">Choose column</option>
-                    {w.file.columns.map((c) => (
-                      <option value={c.id} key={c.id}>
-                        {c.name || "Unnamed"} ({c.id})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {!job.target_column_id && (
+                  <label>
+                    Target column
+                    <select
+                      value={column}
+                      onChange={(e) => setColumn(e.target.value)}
+                    >
+                      <option value="">Choose column</option>
+                      {w.file.columns.map((c) => (
+                        <option value={c.id} key={c.id}>
+                          {c.name || "Unnamed"} ({c.id})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {job.impact.replacement_required && (
+                  <div className="clarification">
+                    <label htmlFor="replacement">
+                      Exact replacement value
+                      <input
+                        id="replacement"
+                        value={replacement}
+                        disabled={remove}
+                        onChange={(e) => setReplacement(e.target.value)}
+                        maxLength={2000}
+                      />
+                    </label>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={remove}
+                        onChange={(e) => setRemove(e.target.checked)}
+                      />
+                      Remove matched text instead
+                    </label>
+                    <p>
+                      Spaces and backslashes are used literally. An empty field
+                      never means deletion.
+                    </p>
+                  </div>
+                )}
                 <button
-                  disabled={!(column || job.target_column_id) || !!running}
+                  disabled={
+                    !(column || job.target_column_id) ||
+                    !!running ||
+                    (job.impact.replacement_required && !remove && !replacement)
+                  }
                   onClick={() =>
-                    run("Updating instruction…", async () =>
+                    run("Updating instruction…", async () => {
+                      if (
+                        replacement &&
+                        !replacement.trim() &&
+                        !remove &&
+                        !confirm(
+                          "The replacement contains only whitespace. Keep this exact value?",
+                        )
+                      )
+                        return;
                       setJob(
                         await api(`jobs/${job.job_id}/`, {
                           target_column_id: column || job.target_column_id,
-                          replacement_value: replacement,
+                          ...(job.impact.replacement_required
+                            ? {
+                                replacement_value: replacement,
+                                action: remove ? "remove" : "replace",
+                              }
+                            : {}),
                           base_revision: w.revision,
                         }),
-                      ),
-                    )
+                      );
+                    })
                   }
                 >
                   Continue
@@ -913,8 +971,7 @@ export function App() {
             )}
             {job?.status === "awaiting_consent" && (
               <section className="card">
-                <p className="eyebrow">02 / REVIEW SCOPE</p>
-                <h2>Review data shared with AI</h2>
+                <h2>Permission to generate suggestions</h2>
                 <p>
                   Only selected exact values and temporary IDs from{" "}
                   <b>
@@ -926,64 +983,80 @@ export function App() {
                   will be sent to Groq. Counts, neighbouring columns and
                   complete rows stay on this server.
                 </p>
-                <div className="scope-controls">
-                  <label>
-                    Search values
-                    <input
-                      value={query}
-                      onChange={(e) => {
-                        setQuery(e.target.value);
-                        setScopePage(1);
-                      }}
-                      placeholder="Search exact values…"
-                    />
-                  </label>
-                  <span>
-                    {scopeInfo?.total || 0} unique values · Select up to 200
-                  </span>
-                </div>
-                <div className="scope-list">
-                  {scopeInfo?.items.map((v) => (
-                    <label className="scope-item" key={v.id}>
+                <p>
+                  {scopeInfo?.total || 0} exact values in this column.{" "}
+                  {scopeInfo?.within_budget
+                    ? "All values fit in this step."
+                    : "Choose a subset within the limits below; other values will stay unchanged."}
+                </p>
+                <details
+                  className="scope-details"
+                  key={job.job_id + String(scopeInfo?.within_budget)}
+                  open={
+                    scopeInfo && !scopeInfo.within_budget ? true : undefined
+                  }
+                >
+                  <summary>Inspect values or adjust selection</summary>
+                  <div className="scope-controls">
+                    <label>
+                      Search values
                       <input
-                        type="checkbox"
-                        checked={scope.some((x) => x.id === v.id)}
-                        disabled={
-                          !scope.some((x) => x.id === v.id) &&
-                          (scope.length >= 200 || v.value.length > 4000)
-                        }
-                        onChange={(e) =>
-                          setScope(
-                            e.target.checked
-                              ? [...scope, v]
-                              : scope.filter((x) => x.id !== v.id),
-                          )
-                        }
+                        value={query}
+                        onChange={(e) => {
+                          setQuery(e.target.value);
+                          setScopePage(1);
+                        }}
+                        placeholder="Search exact values…"
                       />
-                      <span title={v.value}>{v.value}</span>
-                      <small>{v.occurrences} rows</small>
                     </label>
-                  ))}
-                </div>
-                <div className="pagination">
-                  <button
-                    className="secondary"
-                    disabled={scopePage === 1}
-                    onClick={() => setScopePage(scopePage - 1)}
-                  >
-                    Previous
-                  </button>
-                  <span>Page {scopePage}</span>
-                  <button
-                    className="secondary"
-                    disabled={
-                      scopePage * 50 >= (scopeInfo?.filtered_total || 0)
-                    }
-                    onClick={() => setScopePage(scopePage + 1)}
-                  >
-                    Next
-                  </button>
-                </div>
+                    <span>
+                      {scopeInfo?.total || 0} unique values · Select up to 200
+                    </span>
+                  </div>
+                  <div className="scope-list">
+                    {scopeInfo?.items.map((v) => (
+                      <label className="scope-item" key={v.id}>
+                        <input
+                          type="checkbox"
+                          checked={scope.some((x) => x.id === v.id)}
+                          disabled={
+                            !scope.some((x) => x.id === v.id) &&
+                            (scope.length >= 200 || v.value.length > 4000)
+                          }
+                          onChange={(e) => {
+                            setConsent(false);
+                            setScope(
+                              e.target.checked
+                                ? [...scope, v]
+                                : scope.filter((x) => x.id !== v.id),
+                            );
+                          }}
+                        />
+                        <span title={v.value}>{v.value}</span>
+                        <small>{v.occurrences} rows</small>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="pagination">
+                    <button
+                      className="secondary"
+                      disabled={scopePage === 1}
+                      onClick={() => setScopePage(scopePage - 1)}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {scopePage}</span>
+                    <button
+                      className="secondary"
+                      disabled={
+                        scopePage * 50 >= (scopeInfo?.filtered_total || 0)
+                      }
+                      onClick={() => setScopePage(scopePage + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </details>
                 <p>
                   {scope.length} values ·{" "}
                   {scope
@@ -1052,10 +1125,7 @@ export function App() {
                   </h2>
                   <span className="step-label">02 / REVIEW</span>
                 </div>
-                <p>
-                  Nothing has been changed yet. Every suggestion starts with
-                  Keep.
-                </p>
+                <p>No changes will be made until you apply your selections.</p>
                 {job.impact.partial_scope && (
                   <p className="warning">
                     Only selected values were processed. Other values remain
@@ -1070,37 +1140,49 @@ export function App() {
                 )}
                 <div className="actions">
                   <button
-                    className="secondary"
+                    className={
+                      "batch-button " +
+                      (allEligible ? "is-active" : "secondary")
+                    }
+                    aria-pressed={allEligible}
+                    disabled={!eligible.length || !!running}
                     onClick={() =>
-                      setSelected(
-                        suggestions
-                          .filter(
-                            (s) =>
-                              s.ai_status ===
-                              (job.operation === "normalise_missing"
-                                ? "missing"
-                                : "proposed"),
-                          )
-                          .map((s) => s.id),
+                      selectSuggestions(
+                        [
+                          ...new Set([
+                            ...selected,
+                            ...eligible.map((s) => s.id),
+                          ]),
+                        ],
+                        "apply",
                       )
                     }
                   >
-                    Select all{" "}
-                    {
-                      suggestions.filter(
-                        (s) =>
-                          s.ai_status ===
-                          (job.operation === "normalise_missing"
-                            ? "missing"
-                            : "proposed"),
-                      ).length
-                    }{" "}
-                    eligible suggestions
+                    <ListChecks size={17} /> Select all {eligible.length}{" "}
+                    eligible suggestions {allEligible && <Check size={16} />}
                   </button>
-                  <button className="text" onClick={() => setSelected([])}>
-                    Keep all
+                  <button
+                    className={
+                      "batch-button " +
+                      (batch === "keep" && !selected.length
+                        ? "is-active"
+                        : "secondary")
+                    }
+                    aria-pressed={batch === "keep" && !selected.length}
+                    disabled={!!running}
+                    onClick={() => selectSuggestions([], "keep")}
+                  >
+                    <Shield size={17} /> Keep all{" "}
+                    {batch === "keep" && !selected.length && (
+                      <Check size={16} />
+                    )}
                   </button>
                 </div>
+                <p aria-live="polite">
+                  {selected.length
+                    ? `${selected.length} selected · ${changedRows} rows will change across all pages · Preview only`
+                    : "All suggestions are set to Keep. Select suggestions to preview changes."}
+                </p>
                 <div className="table-wrap">
                   <table className="suggestion-table">
                     <thead>
@@ -1110,7 +1192,7 @@ export function App() {
                           "Proposed value",
                           "Occurrences",
                           "AI status / Reason",
-                          "Action",
+                          "Apply",
                         ].map((h) => (
                           <th key={h}>{h}</th>
                         ))}
@@ -1139,27 +1221,26 @@ export function App() {
                             <small className="reason">{s.reason}</small>
                           </td>
                           <td>
-                            <select
-                              aria-label={`Action for ${s.original}`}
-                              disabled={["valid", "unchanged"].includes(
-                                s.ai_status,
-                              )}
-                              value={selected.includes(s.id) ? "apply" : "keep"}
-                              onChange={(e) =>
-                                setSelected(
-                                  e.target.value === "apply"
-                                    ? [...selected, s.id]
-                                    : selected.filter((id) => id !== s.id),
-                                )
-                              }
-                            >
-                              <option value="keep">Keep</option>
-                              <option value="apply">
-                                {job.operation === "normalise_missing"
-                                  ? "Treat as missing"
-                                  : "Apply"}
-                              </option>
-                            </select>
+                            <label className="checkbox suggestion-choice">
+                              <input
+                                type="checkbox"
+                                aria-label={`Apply change for ${s.original}`}
+                                disabled={
+                                  ["valid", "unchanged"].includes(
+                                    s.ai_status,
+                                  ) || !!running
+                                }
+                                checked={selected.includes(s.id)}
+                                onChange={(e) =>
+                                  selectSuggestions(
+                                    e.target.checked
+                                      ? [...selected, s.id]
+                                      : selected.filter((id) => id !== s.id),
+                                  )
+                                }
+                              />
+                              {selected.includes(s.id) ? "Apply" : "Keep"}
+                            </label>
                           </td>
                         </tr>
                       ))}
@@ -1168,14 +1249,11 @@ export function App() {
                 </div>
                 <div className="review-bottom">
                   <span>
-                    {selected.length} suggestions selected ·{" "}
-                    {suggestions
-                      .filter((s) => selected.includes(s.id))
-                      .reduce((n, s) => n + s.occurrences, 0)}{" "}
-                    rows may change
+                    {selected.length} suggestions selected · {changedRows} rows
+                    will change
                   </span>
                   <button
-                    disabled={!selected.length || !!running}
+                    disabled={!changedRows || !!running}
                     onClick={() => apply()}
                   >
                     Apply selected changes <Check size={16} />
@@ -1188,8 +1266,7 @@ export function App() {
                 <div className="section-heading">
                   <div>
                     <h2>
-                      {job?.status === "ready" &&
-                      job.operation === "regex_replace"
+                      {job?.status === "ready" && job.operation
                         ? "Review your changes"
                         : applied
                           ? "Your cleaned data"
@@ -1199,20 +1276,20 @@ export function App() {
                       {job?.status === "ready" &&
                       job.operation === "regex_replace"
                         ? `${job.impact.matches} matches · ${job.impact.changed_rows} rows affected · Preview only, not applied`
-                        : applied
-                          ? "Changes applied. Ready when you are."
-                          : "A snapshot of your current table."}
+                        : p1Ready
+                          ? `${changedRows} rows will change across all pages · Preview only, not applied`
+                          : applied
+                            ? "Changes applied. Ready when you are."
+                            : "A snapshot of your current table."}
                     </p>
                   </div>
                   <span className="step-label">
                     {job?.status === "ready" ? "02 / REVIEW" : "TABLE PREVIEW"}
                   </span>
                 </div>
-                {applied ||
-                (job?.status === "ready" &&
-                  job.operation === "regex_replace") ? (
+                {applied || job?.status === "ready" ? (
                   <>
-                    {!applied && (
+                    {!applied && !p1 && (
                       <>
                         <div className="rule-row">
                           <details>
@@ -1261,13 +1338,35 @@ export function App() {
                         )}
                       </>
                     )}
+                    {!applied && !p1 && (
+                      <p className="rule-summary">
+                        Target:{" "}
+                        {
+                          w.file.columns.find(
+                            (c) => c.id === job.target_column_id,
+                          )?.name
+                        }{" "}
+                        ·{" "}
+                        {job.action === "remove" ? (
+                          "Remove matched text"
+                        ) : (
+                          <>
+                            Replacement:{" "}
+                            <strong className="literal">
+                              {JSON.stringify(job.replacement_value)}
+                            </strong>
+                          </>
+                        )}{" "}
+                        · Preview only
+                      </p>
+                    )}
                     <div className="dual">
                       <div className="pane original">
                         <h3>Original · Before this step</h3>
                         <Table
                           headers={table.headers}
                           rows={table.before}
-                          before={table.rows}
+                          before={previewRows}
                           offset={table.offset}
                           active={active}
                           highlights={positions}
@@ -1283,7 +1382,7 @@ export function App() {
                         </h3>
                         <Table
                           headers={table.headers}
-                          rows={table.rows}
+                          rows={previewRows}
                           before={table.before}
                           offset={table.offset}
                           active={active}
@@ -1298,7 +1397,7 @@ export function App() {
                 ) : (
                   <Table
                     headers={table.headers}
-                    rows={table.rows}
+                    rows={previewRows}
                     offset={table.offset}
                   />
                 )}

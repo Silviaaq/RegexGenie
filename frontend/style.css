@@ -1182,3 +1182,42 @@ textarea:disabled {
   background: #f8f9fb;
   color: #64748b;
 }
+
+.batch-button.is-active {
+  background: var(--navy);
+  color: white;
+  border-color: var(--navy);
+}
+.batch-button.secondary:hover {
+  background: #eef3f8;
+  border-color: #a0b1c5;
+}
+.batch-button.is-active:hover {
+  background: #1f4360;
+}
+.batch-button:active {
+  transform: translateY(1px);
+}
+.scope-details {
+  margin: 12px 0;
+}
+.clarification {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.literal {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+}
+.suggestion-choice {
+  min-width: 85px;
+  color: var(--navy);
+}
+@media (max-width: 767px) {
+  .batch-button {
+    width: 100%;
+  }
+}
