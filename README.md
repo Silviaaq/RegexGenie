@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/60bbcf54-ed21-44b9-a840-c3f624f1ddae
 - Original and Preview show the exact selected changes before Apply, including repeated values and pagination. Download always exports the last applied data.
 - Updated landing copy explains upload, describe, and review/download. Questionnaire topic analysis is outside this release.
 
-Public testing: open **https://regexgenie.onrender.com/app** or use **Try Sample Data** on the homepage. No account or local installation is required. Temporary files may disappear on restart; download results promptly.
+Public testing: open **https://regexgenie.onrender.com** or use **Try Sample Data** on the homepage. No account or local installation is required. Temporary files may disappear on restart; download results promptly.
 
 ## Local setup
 
